@@ -4,11 +4,16 @@ import sys
 import random
 import numpy as np
 import matplotlib.pyplot as plt
-import time
+from time import perf_counter
 from datetime import datetime, time, timedelta
 
 # Nueva tupla de tipo Individuo que tiene su solucion y la evaluacion de la solucion
 Individuo = namedtuple('Individuo', ['solucion', 'evaluacion', 'evaluacion_trayecto', 'evaluacion_carga', 'evaluacion_tiempo', 'dominacion', 'distancia'])
+
+# Para la grafica
+y_mejor = []
+y_promedio = []
+y_peor = []
 
 def leer_archivo(ruta_archivo):    
     coordenadas = []
@@ -99,9 +104,9 @@ exit(0)
 '''
 
 # Función para generar una hora aleatoria
-def generar_hora_aleatoria(horario):       
+def generar_hora_aleatoria(horario, hora_final):       
     hora_inicio_dt = datetime.strptime(str(horario[0]), "%H:%M:%S")
-    hora_fin_dt = datetime.strptime(str(horario[1]), "%H:%M:%S")    
+    hora_fin_dt = datetime.strptime(hora_final, "%H:%M:%S")    
     diferencia = hora_fin_dt - hora_inicio_dt
     total_segundos = diferencia.total_seconds()
     segundos_aleatorios = random.randint(0, int(total_segundos))
@@ -225,7 +230,7 @@ def genera_poblacion(num_nodos, num_camiones, coordenadas, horario):
             trayecto.append(deposito) 
             datos_camion.append(trayecto)
             datos_camion.append(periodos[camion-1])
-            hora_que_finalizo = generar_hora_aleatoria(periodos[camion-1])
+            hora_que_finalizo = generar_hora_aleatoria(periodos[camion-1], horario[1])
             datos_camion.append(hora_que_finalizo)
             solucion.append(datos_camion)
             dimension = dimension - contenedores               
@@ -371,7 +376,7 @@ def cruza_de_permutaciones(sol1, sol2, pc):
         trayecto_h1.append(deposito) 
         datos_camion.append(trayecto_h1)
         datos_camion.append(sol1[camion-1][1])
-        hora_que_finalizo = generar_hora_aleatoria(sol1[camion-1][1])
+        hora_que_finalizo = generar_hora_aleatoria(sol1[camion-1][1], horario[1])
         datos_camion.append(hora_que_finalizo)
         sol_hijo1.append(datos_camion)
         dimension = dimension - contenedores               
@@ -411,7 +416,7 @@ def cruza_de_permutaciones(sol1, sol2, pc):
         trayecto_h2.append(deposito) 
         datos_camion.append(trayecto_h2)
         datos_camion.append(sol2[camion-1][1])
-        hora_que_finalizo = generar_hora_aleatoria(sol2[camion-1][1])
+        hora_que_finalizo = generar_hora_aleatoria(sol2[camion-1][1], horario[1])
         datos_camion.append(hora_que_finalizo)
         sol_hijo2.append(datos_camion)
         dimension = dimension - contenedores               
@@ -468,11 +473,35 @@ def mutacion(solucion, pm):
     
     return mut
 
+def limpiar_lista(lista):    
+    lista = [sublista for sublista in lista if sublista]
+    return lista 
+
+def promedio(poblacion):
+    suma_aptitudes = 0
+    for i in poblacion:
+        suma_aptitudes += i.evaluacion
+    y_promedio.append(suma_aptitudes/len(poblacion))
+
+'''
+def encontrar_elemento(elemento, lista):
+    encontrado = False
+    for sublista in lista:
+        if elemento in sublista:
+            encontrado = True
+            break
+    return encontrado
+'''
+'''
+lst = [[0, 2, 3, 4, 6, 7, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 25, 28, 29, 30, 32, 40, 41, 47, 49, 50, 51, 55, 56, 57, 63, 69, 73, 76, 77, 78, 83, 94, 96, 98, 147, 153, 155, 161, 169, 194], [1, 13, 24, 33, 34, 35, 37, 39, 42, 43, 45, 48, 52, 66, 70, 74, 75, 79, 82, 91, 92, 103, 112, 129, 135, 138, 170, 188], [44, 46, 53, 59, 65, 90, 93, 97, 108, 146, 156, 189, 190, 197], [36, 38, 54, 60, 61, 71, 99, 119, 125, 139, 163, 178, 181], [72, 81, 89, 113, 145], [106, 150, 182, 192], [115, 133, 184], [149], [157], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []]
+limpiar_lista(lst)
+exit(0)
+'''
 # A(x1|y1) domina a B(x2|y2) cuando:
 # (x1 ≤ x2 y y1 ≤ y2) y (x1 < x2 o y1 < y2)
 # - 1min => Si se imprime la poblacion, con 200 individuos en la poblacion
 def ordenamiento_no_determinado(poblacion):
-    i = 0
+    i = 0    
     while i < len(poblacion):     
         dominados = []   
         j = 0
@@ -493,7 +522,7 @@ def ordenamiento_no_determinado(poblacion):
     '''    
     rango_k = []
     cont_ind = 0
-
+    
     i = 0
     while i < len(poblacion):
         dominacion = list(poblacion[i].dominacion)
@@ -507,10 +536,11 @@ def ordenamiento_no_determinado(poblacion):
     print(rangos)
     print()
     exit(0)
-    '''
+    '''    
     crea_rango = True
-    while crea_rango:        
-        rango_n = []
+    iter = 0
+    while crea_rango and iter < 100:            
+        rango_n = []                
         i = 0
         while i < len(poblacion):            
             for j in rango_k:   
@@ -525,6 +555,10 @@ def ordenamiento_no_determinado(poblacion):
                             cont_ind += 1
                 j += 1
             i += 1
+        '''
+        print(len(rango_n))
+        print(cont_ind)        
+        '''
         rangos.append(rango_n)
         '''
         print(rangos)
@@ -533,14 +567,30 @@ def ordenamiento_no_determinado(poblacion):
         '''
         if cont_ind == len(poblacion):
             break
-        rango_k = rango_n    
+        rango_k = rango_n 
+        #print(f'Iter = {iter}')
+        iter += 1   
+    rangos = limpiar_lista(rangos)    
+    '''
+    ind = 0
+    rango_n = []
+    if cont_ind < len(poblacion):
+        while ind < len(poblacion):
+            dominacion = list(poblacion[ind].dominacion) 
+            #if not encontrar_elemento(ind, rangos):
+            if dominacion[0] > 0:
+                rango_n.append(ind)                
+            ind += 1
+    rangos.append(rango_n)
+    print(rangos)
+    '''
+    #exit(0)
 
     '''
     print(rangos)
     print()
     exit(0)
-    '''
-
+    '''    
     return rangos
 
 def ordenamiento_por_distancia_de_aglomeracion(poblacion, rangos, capacidad):
@@ -564,7 +614,8 @@ def ordenamiento_por_distancia_de_aglomeracion(poblacion, rangos, capacidad):
         while ind < len(rango_de_poblacion):
             if rango_de_poblacion[ind] is not rango_de_poblacion[0] and rango_de_poblacion[ind] is not rango_de_poblacion[len(rango_de_poblacion)-1]:
                 distancia_ind = poblacion[ind].distancia
-                rango_de_poblacion[ind] = rango_de_poblacion[ind]._replace(distancia=distancia_ind+(rango_de_poblacion[ind+1].evaluacion - rango_de_poblacion[ind-1].evaluacion)/(rango_de_poblacion[len(rango_de_poblacion)-1].evaluacion - rango_de_poblacion[0].evaluacion))                
+                if rango_de_poblacion[len(rango_de_poblacion)-1].evaluacion - rango_de_poblacion[0].evaluacion != 0:
+                    rango_de_poblacion[ind] = rango_de_poblacion[ind]._replace(distancia=distancia_ind+(rango_de_poblacion[ind+1].evaluacion - rango_de_poblacion[ind-1].evaluacion)/(rango_de_poblacion[len(rango_de_poblacion)-1].evaluacion - rango_de_poblacion[0].evaluacion))                                
             ind += 1
         '''
         print(rango_de_poblacion)
@@ -583,74 +634,103 @@ def ordenamiento_por_distancia_de_aglomeracion(poblacion, rangos, capacidad):
     return poblacion
                 
 
-def alg_NSGA2(num_nodos, num_camiones, coordenadas, horario, capacidad):
+def alg_NSGA2(num_nodos, num_camiones, coordenadas, horario, capacidad):    
+    mejor_solucion = Individuo(None, 0, 0, 0, 0, [0,None], 0)
+    peor_solucion = Individuo(None, 0, 0, 0, 0, [0,None], 0)
+
     # Inicializa poblacion
     poblacion = genera_poblacion(int(num_nodos), int(num_camiones), coordenadas, horario)
     #print(f'\nPoblación generada: \n{poblacion}')
 
-    # Se agregan individuos a la poblacion
-    iter = 0
-    while iter < 50:
+    gen = 0
+    while gen < 100:
+        print(f'Generación = {gen+1}')
+        # Se agregan individuos a la poblacion
+        iter = 0
+        while iter < 50:
+            # Evaluacion de la poblacion
+            evaluar_poblacion(poblacion, int(capacidad))
+            #print(f'\nEvaluación: \n{poblacion}\n')
+
+            # Condicion de termino
+            #for generacion in range(num_gen): 
+            # Seleccion por torneo de padres    
+            padre1, padre2 = seleccion_por_torneo(poblacion, int(capacidad))
+            #print(poblacion[padre1].solucion)
+            #print(poblacion[padre2].solucion)
+            #print()
+
+            # Cruza de permutaciones
+            hijo1, hijo2 = cruza_de_permutaciones(poblacion[padre1].solucion, poblacion[padre2].solucion, random.uniform(0.6, 0.9))
+            #print(hijo1.solucion)
+            #print(hijo2.solucion)
+
+            # Mutacion de los hijos
+            hijo1 = mutacion(hijo1.solucion, random.uniform(0.01, 0.1))
+            hijo2 = mutacion(hijo2.solucion, random.uniform(0.01, 0.1))
+
+            # Se agregan los hijos a la poblacion
+            poblacion.append(hijo1)
+            poblacion.append(hijo2)
+
+            iter += 1  
+
+        tamanio_poblacion = len(poblacion)
+
         # Evaluacion de la poblacion
-        evaluar_poblacion(poblacion, int(capacidad))
-        #print(f'\nEvaluación: \n{poblacion}\n')
+        evaluar_poblacion(poblacion, int(capacidad))        
 
-        # Condicion de termino
-        #for generacion in range(num_gen): 
-        # Seleccion por torneo de padres    
-        padre1, padre2 = seleccion_por_torneo(poblacion, int(capacidad))
-        #print(poblacion[padre1].solucion)
-        #print(poblacion[padre2].solucion)
-        #print()
-
-        # Cruza de permutaciones
-        hijo1, hijo2 = cruza_de_permutaciones(poblacion[padre1].solucion, poblacion[padre2].solucion, random.uniform(0.6, 0.9))
-        #print(hijo1.solucion)
-        #print(hijo2.solucion)
-
-        # Mutacion de los hijos
-        hijo1 = mutacion(hijo1.solucion, random.uniform(0.01, 0.1))
-        hijo2 = mutacion(hijo2.solucion, random.uniform(0.01, 0.1))
-
-        # Se agregan los hijos a la poblacion
-        poblacion.append(hijo1)
-        poblacion.append(hijo2)
-
-        iter += 1  
-
-    tamanio_poblacion = len(poblacion)
-
-    # Evaluacion de la poblacion
-    evaluar_poblacion(poblacion, int(capacidad))
-
-    # Aplica ordenamiento no determinado a la poblacion
-    orden_indices = ordenamiento_no_determinado(poblacion)  
-    '''
-    print(orden_indices)
-    print(poblacion[0])
-    print()
-    '''
-    copia_poblacion = poblacion
-    ind = 0
-    # Ordena la poblacion
-    for rango in orden_indices:
-        for indice in rango:
-            poblacion[ind] = copia_poblacion[indice]
+        # Aplica ordenamiento no determinado a la poblacion
+        # Por checar = En ocasiones se produce errores
+        orden_indices = ordenamiento_no_determinado(poblacion)                  
+        '''
+        print(orden_indices)
+        print(poblacion[0])
+        print()
+        '''
+        copia_poblacion = poblacion
+        ind = 0
+        # Ordena la poblacion
+        for rango in orden_indices:
+            for indice in rango:
+                poblacion[ind] = copia_poblacion[indice]
+                ind += 1        
+        '''
+        print(poblacion[0])
+        print(poblacion[1])
+        print()
+        '''    
+        poblacion = ordenamiento_por_distancia_de_aglomeracion(poblacion, orden_indices, capacidad)    
+        copia_poblacion = poblacion.copy()
+        ind = 0
+        while ind < tamanio_poblacion:
+            if ind >= tamanio_poblacion/2:
+            #if ind < tamanio_poblacion/2:
+                poblacion.remove(copia_poblacion[ind])            
             ind += 1
-    '''
-    print(poblacion[0])
-    print(poblacion[1])
-    print()
-    '''
+        #print(f'Poblacion = {len(poblacion)}')        
+        
+        mejor_solucion_por_gen = poblacion[0]
+        peor_solucion_por_gen = poblacion[len(poblacion)-1]
+        if gen == 1:
+            mejor_solucion = mejor_solucion_por_gen            
+        elif mejor_solucion_por_gen.evaluacion < mejor_solucion.evaluacion and mejor_solucion_por_gen.evaluacion < peor_solucion_por_gen.evaluacion:
+            mejor_solucion = mejor_solucion_por_gen
+        elif peor_solucion_por_gen.evaluacion < mejor_solucion.evaluacion and peor_solucion_por_gen.evaluacion < mejor_solucion_por_gen.evaluacion:
+            mejor_solucion = peor_solucion_por_gen
+        if gen == 1:
+            peor_solucion = peor_solucion_por_gen            
+        elif mejor_solucion_por_gen.evaluacion > peor_solucion.evaluacion and mejor_solucion_por_gen.evaluacion > peor_solucion_por_gen.evaluacion:
+            peor_solucion = mejor_solucion_por_gen
+        elif peor_solucion_por_gen.evaluacion > peor_solucion.evaluacion and peor_solucion_por_gen.evaluacion > mejor_solucion_por_gen.evaluacion:
+            peor_solucion = peor_solucion_por_gen
+        y_mejor.append(mejor_solucion.evaluacion)        
+        y_peor.append(peor_solucion.evaluacion)        
+        promedio(poblacion)
+        gen += 1
 
-    poblacion = ordenamiento_por_distancia_de_aglomeracion(poblacion, orden_indices, capacidad)    
-    copia_poblacion = poblacion.copy()
-    ind = 0
-    while ind < tamanio_poblacion:
-        if ind >= tamanio_poblacion/2:
-            poblacion.remove(copia_poblacion[ind])            
-        ind += 1
-    #print(len(poblacion))
+    #print(poblacion)
+    return mejor_solucion
 
 
 if __name__ == '__main__':
@@ -675,4 +755,24 @@ if __name__ == '__main__':
             print("ERROR: Ingresa el horario con el formato que se indica.")
 
     horario = [hora_inicio, hora_fin]
-    alg_NSGA2(numN, numC, coordenadas, horario, int(capacidad))    
+    comienzo = perf_counter()
+    solucion = alg_NSGA2(numN, numC, coordenadas, horario, int(capacidad))    
+    fin = perf_counter()
+    print(f"Mejor solución = {solucion.solucion}")
+    print(f"Evaluación = {solucion.evaluacion}")
+    print(f"Evaluación de trayecto = {solucion.evaluacion_trayecto}")
+    print(f"Evaluación de carga = {solucion.evaluacion_carga}")
+    print(f"Evaluación de tiempo = {solucion.evaluacion_tiempo}")
+    print(f"\nTiempo en que finalizo el algoritmo NSGA2 = {fin-comienzo} seg")
+
+    # Crea grafica con la mejor, peor y el promedio de las aptitudes de cada generacion
+    x_generacion = np.linspace(0, 100, 100)
+    plt.plot(x_generacion, y_mejor, label='Mejor')
+    plt.plot(x_generacion, y_peor, label='Peor')
+    plt.plot(x_generacion, y_promedio, label='Promedio')
+    plt.title('NSGA-II con la optimización de rutas')
+    plt.xlabel('Generación')
+    plt.ylabel('Aptitud')
+    plt.legend()
+    plt.xlim(1,100)
+    plt.show()
