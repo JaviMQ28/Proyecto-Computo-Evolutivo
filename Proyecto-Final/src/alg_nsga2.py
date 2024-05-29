@@ -1,20 +1,32 @@
 from collections import namedtuple
+import csv
 import math
+import os
 import sys
 import random
 import numpy as np
 import matplotlib.pyplot as plt
 from time import perf_counter
 from datetime import datetime, time, timedelta
+import tkinter
+
+import pandas as pd
 
 # Nueva tupla de tipo Individuo que tiene su solucion y la evaluacion de la solucion
 Individuo = namedtuple('Individuo', ['solucion', 'evaluacion', 'evaluacion_trayecto', 'evaluacion_carga', 'evaluacion_tiempo', 'dominacion', 'distancia'])
 
-# Para la grafica
+# Para la graficas
 y_mejor = []
+y_mejor_actual = []
 y_promedio = []
-y_peor = []
+y_peor = [] 
+y_peor_actual = []
+trayectos_soluciones = []
+cargas_soluciones = []
+tiempos_soluciones = []
 
+
+# Lectura de un archivo .txt para recuperar datos para el problema
 def leer_archivo(ruta_archivo):    
     coordenadas = []
     num_camiones = 0
@@ -40,15 +52,12 @@ def leer_archivo(ruta_archivo):
             if linea.startswith('NAME'):
                 num = linea.find('k')
                 num_camiones = linea[num+1:]
-                #print(f'Cantidad de camiones = {num_camiones}')
             # Recuperamos la capacidad de cada camion
             elif linea.startswith('CAPACITY'):
                 _, _, capacidad_camion = linea.split()
-                #print(f'Capacidad máxima de cada camión = {capacidad_camion}')
             # Recuperamos la cantidad de nodos
             elif linea.startswith('DIMENSION'):
                 _, _, num_nodos = linea.split()
-                #print(f'Capacidad máxima de cada camión = {capacidad_camion}')
             # Guardamos el numero de linea donde comienza una seccion del archivo
             elif linea.startswith('NODE_COORD_SECTION'):
                 lim_inf_coordenadas = num_linea
@@ -68,7 +77,6 @@ def leer_archivo(ruta_archivo):
     for linea in lineas_deseadas:
         _, x, y = linea.split()
         coordenadas.append([(int(x),int(y)), 0])
-    #print(f'Ubicación de los contenedores, sin cantidad de residuos acumulados : \n {coordenadas}')
 
     # Filtrar las líneas deseadas
     lineas_deseadas = [linea for i, linea in enumerate(lineas) if i >= lim_inf_residuos and i <= lim_sup_residuos]
@@ -78,10 +86,10 @@ def leer_archivo(ruta_archivo):
         _, residuos = linea.split()
         coordenadas[num_linea][1] = int(residuos)
         num_linea += 1
-    #print(f'Ubicación de los contenedores, con cantidad de residuos acumulados : \n {coordenadas}')
 
     return num_nodos, num_camiones, capacidad_camion, coordenadas
 
+# Divide un periodo de tiempo en periodos de tiempo iguales
 def dividir_horas(intervalos, horario):
     hora_inicio_dt = datetime.strptime(horario[0], "%H:%M:%S")
     hora_fin_dt = datetime.strptime(horario[1], "%H:%M:%S")
@@ -97,15 +105,10 @@ def dividir_horas(intervalos, horario):
         inicio_intervalo = fin_intervalo
 
     return periodos
-'''
-periodos = dividir_horas(5)
-print(periodos)
-exit(0)
-'''
 
 # Función para generar una hora aleatoria
-def generar_hora_aleatoria(horario, hora_final):       
-    hora_inicio_dt = datetime.strptime(str(horario[0]), "%H:%M:%S")
+def generar_hora_aleatoria(horario, hora_final):         
+    hora_inicio_dt = datetime.strptime(str(horario[0]).split(".")[0], "%H:%M:%S")
     hora_fin_dt = datetime.strptime(hora_final, "%H:%M:%S")    
     diferencia = hora_fin_dt - hora_inicio_dt
     total_segundos = diferencia.total_seconds()
@@ -113,18 +116,15 @@ def generar_hora_aleatoria(horario, hora_final):
     hora_aleatoria = (hora_inicio_dt + timedelta(seconds=segundos_aleatorios)).time()
 
     return str(hora_aleatoria)
-'''
-hora = generar_hora_aleatoria("08:00:00")
-print(hora)
-exit(0)
-'''
 
+# Obtiene la distancia euclidiana, que representara el trafico que tiene una calle
 def distancia_euclidiana(x, y):
     distancia_x = x[1] - x[0]
     distancia_y = y[1] - y[0]
     distancia = math.sqrt(distancia_x**2 + distancia_y**2)
     return distancia
 
+# Evalua el recorrido realizado por un camion, de acuerdo al trafico que hubo y la carga de residuos que se recogieron
 def evaluar_recorrido(trayecto):
     trafico = 0
     num_residuos = 0
@@ -135,14 +135,7 @@ def evaluar_recorrido(trayecto):
         i += 1
     return trafico, num_residuos
 
-'''
-trayecto = [[(82, 76), 0], [(98, 14), 12], [(98, 5), 9], [(5, 42), 4], [(82, 76), 0]]
-trafico, numR = evaluar_recorrido(trayecto)
-print(trafico)
-print(numR)
-exit(0)
-'''
-
+# Evalua el trabajo de un camion, con una capacidad de carga limitada, de acuerdo al recorrido que hizo y el tiempo que le llevo en hacerlo
 def evaluar_camion(camion, capacidad, penalizacion=1000):    
     total_de_trafico, total_residuos = evaluar_recorrido(camion[0])
     evaluacion = total_de_trafico
@@ -164,6 +157,7 @@ def evaluar_camion(camion, capacidad, penalizacion=1000):
 
     return evaluacion, evaluacion_trafico, evaluacion_carga, evaluacion_tiempo
 
+# Evalua una solucion, que representa los recorridos realizados por la cantidad de camiones que se definio con sus horarios establecidos de cada uno
 def evaluar_individuo(individuo, capacidad):        
     eval_ind = 0
     eval_trafico = 0
@@ -180,6 +174,7 @@ def evaluar_individuo(individuo, capacidad):
     individuo = individuo._replace(evaluacion=eval_ind, evaluacion_trayecto=eval_trafico, evaluacion_carga=eval_carga, evaluacion_tiempo=eval_tiempo)
     return individuo
 
+# Evalua a una poblacion de soluciones
 def evaluar_poblacion(poblacion, capacidad):
     # Evalua a cada individuo de la poblacion
     j = 0
@@ -187,7 +182,7 @@ def evaluar_poblacion(poblacion, capacidad):
         poblacion[j] = evaluar_individuo(i, capacidad)
         j += 1
 
-# Genera poblacion de soluciones con representacion de conjuntos de permutaciones
+# Genera una poblacion de soluciones con representacion de conjuntos de permutaciones
 # - solucion[0] = Trayecto del camion
 # - solucion[1] = Horario del camion
 # - solucion[2] = Hora en que finalizo su trabajo el camion
@@ -200,9 +195,7 @@ def genera_poblacion(num_nodos, num_camiones, coordenadas, horario):
         solucion = []    
         periodos = dividir_horas(num_camiones, horario)            
         nodos = 1
-        camion = 1    
-        #hora_inicio = horario[0]
-                          
+        camion = 1                              
         while camion <= num_camiones:                                     
             dimension = num_nodos-1
             datos_camion = []
@@ -219,14 +212,12 @@ def genera_poblacion(num_nodos, num_camiones, coordenadas, horario):
                     trayecto.append(coordenada)
                     coordenadas_agregadas.append(coordenada)
                     nodos += 1
-                contenedores += 1                                                 
-            #print(nodos)      
+                contenedores += 1                                                                 
             if camion == num_camiones and nodos < num_nodos:
                 coordenadas_faltantes = [coordenada for coordenada in coordenadas if coordenada not in coordenadas_agregadas]
                 for coordenada in coordenadas_faltantes:
                     trayecto.append(coordenada)
                     nodos += 1
-            #print(nodos)      
             trayecto.append(deposito) 
             datos_camion.append(trayecto)
             datos_camion.append(periodos[camion-1])
@@ -288,9 +279,6 @@ def cruza_de_permutaciones(sol1, sol2, pc):
         while trayecto[contenedor] != deposito:
             trayecto_de_sol1.append(trayecto[contenedor])
             contenedor += 1
-    '''
-    print(trayecto_de_sol1)
-    '''
     # Recupera el trayecto de los camiones a los contenedores, sin contar al deposito, de la segunda solucion
     for camion in sol2:
         trayecto = camion[0]
@@ -299,15 +287,13 @@ def cruza_de_permutaciones(sol1, sol2, pc):
         while trayecto[contenedor] != deposito:
             trayecto_de_sol2.append(trayecto[contenedor])
             contenedor += 1
-    '''
-    print()
-    print(trayecto_de_sol2)
-    '''
+
     tamanio = len(trayecto_de_sol1)
     indice_comienzo = random.randrange(0, tamanio)
     indice_final = random.randrange(indice_comienzo, tamanio)
     indices_no_agregados = []
     ind = 0
+    # Se agregan unas coordenadas, el hijo 1 del padre A y el hijo 2 del padre B
     while ind < tamanio:
         if ind >= indice_comienzo and ind <= indice_final:
             if np.random.rand() <= pc:
@@ -322,12 +308,7 @@ def cruza_de_permutaciones(sol1, sol2, pc):
             trayecto_de_h2.append(None)         
             indices_no_agregados.append(ind)   
         ind += 1    
-    '''
-    print()
-    print(trayecto_de_h1)
-    print()
-    print(trayecto_de_h2)
-    '''
+    # Se agregan las coordenadas faltantes de los padres, el hijo 1 del padre B y el hijo 2 del padre A
     for indice in indices_no_agregados:
         if trayecto_de_h1[indice] == None and trayecto_de_h2[indice] == None:
             ind = 0
@@ -340,13 +321,8 @@ def cruza_de_permutaciones(sol1, sol2, pc):
                 if trayecto_de_sol1[ind] not in trayecto_de_h2:
                     trayecto_de_h2[indice] = trayecto_de_sol1[ind]            
                 ind += 1            
-    '''
-    print()
-    print(trayecto_de_h1)
-    print()
-    print(trayecto_de_h2)
-    print()
-    '''    
+
+    # Se crea la primer solucion de acuerdo a la definicion establecida y del trayecto que se realizo anteriormente para el hijo 1
     num_camiones = len(sol1)
     num_nodos = len(trayecto_de_h1) + 1
     sol_hijo1 = []
@@ -364,8 +340,7 @@ def cruza_de_permutaciones(sol1, sol2, pc):
             contenedor = trayecto_de_h1[0]
             trayecto_h1.append(contenedor)            
             trayecto_de_h1.remove(contenedor)
-            contenedores += 1                                                 
-        
+            contenedores += 1                                                         
         if camion == num_camiones and nodos < num_nodos:
             contenedores_faltantes = [coordenada for coordenada in trayecto_de_h1 if coordenada not in trayecto_h1]
             for contenedor in contenedores_faltantes:
@@ -381,12 +356,9 @@ def cruza_de_permutaciones(sol1, sol2, pc):
         sol_hijo1.append(datos_camion)
         dimension = dimension - contenedores               
         camion += 1  
-    '''
-    print(sol_hijo1)
-    print(trayecto_de_h1)
-    '''
     ind1 = Individuo(sol_hijo1, 0, 0, 0, 0, [0,None], 0)
 
+    # Se crea la segunda solucion de acuerdo a la definicion establecida y del trayecto que se realizo anteriormente para el hijo 2
     num_camiones = len(sol2)
     num_nodos = len(trayecto_de_h2) + 1
     sol_hijo2 = []
@@ -411,8 +383,7 @@ def cruza_de_permutaciones(sol1, sol2, pc):
             for contenedor in contenedores_faltantes:
                 trayecto_h2.append(contenedor)
                 trayecto_de_h2.remove(contenedor)
-                nodos += 1
-        
+                nodos += 1        
         trayecto_h2.append(deposito) 
         datos_camion.append(trayecto_h2)
         datos_camion.append(sol2[camion-1][1])
@@ -421,10 +392,6 @@ def cruza_de_permutaciones(sol1, sol2, pc):
         sol_hijo2.append(datos_camion)
         dimension = dimension - contenedores               
         camion += 1  
-    '''
-    print(sol_hijo2)
-    print(trayecto_de_h2)
-    '''
     ind2 = Individuo(sol_hijo2, 0, 0, 0, 0, [0,None], 0)
 
     return ind1, ind2
@@ -440,10 +407,8 @@ def mutacion(solucion, pm):
         while trayecto[contenedor] != deposito:
             trayecto_de_sol.append(trayecto[contenedor])
             contenedor += 1
-    '''
-    print(trayecto_de_sol)    
-    print()
-    '''
+    
+    # Se intercambia la ubicacion de dos contenedores, para establecer un recorrido diferente
     i = 0
     while i < len(trayecto_de_sol):
         if np.random.rand() <= pm:
@@ -452,10 +417,8 @@ def mutacion(solucion, pm):
             trayecto_de_sol[i] = trayecto_de_sol[pos_random]
             trayecto_de_sol[pos_random] = temp                         
         i += 1
-    '''    
-    print(trayecto_de_sol)
-    print()
-    '''
+    
+    # Se actualizan los nuevos recorridos de cada camion
     deposito = solucion[0][0][0]
     camion = 0
     ind = 0
@@ -467,40 +430,28 @@ def mutacion(solucion, pm):
                 ind += 1
             i += 1     
         camion += 1   
-    #print(solucion)
-
     mut = Individuo(solucion, 0, 0, 0, 0, [0,None], 0)
     
     return mut
 
+# Elimina las sublistas vacias de una lista
 def limpiar_lista(lista):    
     lista = [sublista for sublista in lista if sublista]
     return lista 
 
+# Obtiene el promedio de una poblacion de acuerdo a la evaluacion de cada individuo
 def promedio(poblacion):
     suma_aptitudes = 0
     for i in poblacion:
         suma_aptitudes += i.evaluacion
     y_promedio.append(suma_aptitudes/len(poblacion))
 
-'''
-def encontrar_elemento(elemento, lista):
-    encontrado = False
-    for sublista in lista:
-        if elemento in sublista:
-            encontrado = True
-            break
-    return encontrado
-'''
-'''
-lst = [[0, 2, 3, 4, 6, 7, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 25, 28, 29, 30, 32, 40, 41, 47, 49, 50, 51, 55, 56, 57, 63, 69, 73, 76, 77, 78, 83, 94, 96, 98, 147, 153, 155, 161, 169, 194], [1, 13, 24, 33, 34, 35, 37, 39, 42, 43, 45, 48, 52, 66, 70, 74, 75, 79, 82, 91, 92, 103, 112, 129, 135, 138, 170, 188], [44, 46, 53, 59, 65, 90, 93, 97, 108, 146, 156, 189, 190, 197], [36, 38, 54, 60, 61, 71, 99, 119, 125, 139, 163, 178, 181], [72, 81, 89, 113, 145], [106, 150, 182, 192], [115, 133, 184], [149], [157], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []]
-limpiar_lista(lst)
-exit(0)
-'''
+# Ordena la poblacion de acuerdo al ordenamiento no determinado, non-determinated sorting, regresando una lista de sublistas de indices de las 
+# ubicaciones de los individuos, de donde deberan de estar ubicados
 # A(x1|y1) domina a B(x2|y2) cuando:
 # (x1 ≤ x2 y y1 ≤ y2) y (x1 < x2 o y1 < y2)
-# - 1min => Si se imprime la poblacion, con 200 individuos en la poblacion
 def ordenamiento_no_determinado(poblacion):
+    # Se calcula lo dominacion de cada individuo
     i = 0    
     while i < len(poblacion):     
         dominados = []   
@@ -516,13 +467,10 @@ def ordenamiento_no_determinado(poblacion):
                     poblacion[j] = poblacion[j]._replace(dominacion=[contador_dominaciones, dominacion[1]])                                        
             j += 1
         i += 1
-    '''
-    print(poblacion[len(poblacion)-1])
-    print()
-    '''    
+
+    # Se crea el primer rango
     rango_k = []
-    cont_ind = 0
-    
+    cont_ind = 0    
     i = 0
     while i < len(poblacion):
         dominacion = list(poblacion[i].dominacion)
@@ -532,11 +480,8 @@ def ordenamiento_no_determinado(poblacion):
         i += 1
     rangos = []
     rangos.append(rango_k)
-    '''
-    print(rangos)
-    print()
-    exit(0)
-    '''    
+
+    # Se crean los demas rangos
     crea_rango = True
     iter = 0
     while crea_rango and iter < 100:            
@@ -555,59 +500,31 @@ def ordenamiento_no_determinado(poblacion):
                             cont_ind += 1
                 j += 1
             i += 1
-        '''
-        print(len(rango_n))
-        print(cont_ind)        
-        '''
         rangos.append(rango_n)
-        '''
-        print(rangos)
-        print()
-        exit(0)
-        '''
         if cont_ind == len(poblacion):
             break
         rango_k = rango_n 
-        #print(f'Iter = {iter}')
         iter += 1   
     rangos = limpiar_lista(rangos)    
-    '''
-    ind = 0
-    rango_n = []
-    if cont_ind < len(poblacion):
-        while ind < len(poblacion):
-            dominacion = list(poblacion[ind].dominacion) 
-            #if not encontrar_elemento(ind, rangos):
-            if dominacion[0] > 0:
-                rango_n.append(ind)                
-            ind += 1
-    rangos.append(rango_n)
-    print(rangos)
-    '''
-    #exit(0)
 
-    '''
-    print(rangos)
-    print()
-    exit(0)
-    '''    
     return rangos
 
+# Ordena la poblacion de acuerdo al ordenamiento por distancia de aglomeracion, crowding distance sorting
 def ordenamiento_por_distancia_de_aglomeracion(poblacion, rangos, capacidad):
+    # Por cada individuo de los rangos se obtiene la distancia de aglomeracion y se ordena cada rango de acuerdo a esa distancia
     indice_pob = 0
     for rango in rangos:
         rango_de_poblacion = []
         indice = indice_pob
+        # Se recupera los individuos de un rango
         for ind in rango:
-            # Error porque ya se habia ordenado la poblacion
-            # rango_de_poblacion.append(poblacion[ind])
             rango_de_poblacion.append(poblacion[indice])
             indice += 1
+
+        # Se ordena el rango de acuerdo a la evaluacion de cada individuo
         rango_de_poblacion = sorted(rango_de_poblacion, key=lambda individuo: evaluar_individuo(individuo, capacidad).evaluacion)    
-        '''
-        print(rango_de_poblacion)
-        exit(0)
-        '''
+
+        # Se calcula la distancia de aglomeracion de cada individuo del rango
         rango_de_poblacion[0] = rango_de_poblacion[0]._replace(distancia=math.inf)        
         rango_de_poblacion[len(rango_de_poblacion)-1] = rango_de_poblacion[len(rango_de_poblacion)-1]._replace(distancia=math.inf)        
         ind = 0
@@ -617,124 +534,168 @@ def ordenamiento_por_distancia_de_aglomeracion(poblacion, rangos, capacidad):
                 if rango_de_poblacion[len(rango_de_poblacion)-1].evaluacion - rango_de_poblacion[0].evaluacion != 0:
                     rango_de_poblacion[ind] = rango_de_poblacion[ind]._replace(distancia=distancia_ind+(rango_de_poblacion[ind+1].evaluacion - rango_de_poblacion[ind-1].evaluacion)/(rango_de_poblacion[len(rango_de_poblacion)-1].evaluacion - rango_de_poblacion[0].evaluacion))                                
             ind += 1
-        '''
-        print(rango_de_poblacion)
-        exit(0)
-        '''
+
+        # Se ordena el rango de acuerdo a la distancia de aglomeracion de cada individuo
         rango_de_poblacion = sorted(rango_de_poblacion, key=lambda individuo: individuo.distancia, reverse=True)
-        '''
-        print(rango_de_poblacion)
-        print()
-        exit(0)
-        '''
+
+        # Se actualiza el nuevo orden de ese rango en la poblacion
         for individuo in rango_de_poblacion:
             poblacion[indice_pob] = individuo
             indice_pob += 1
     
     return poblacion
-                
 
+# Obtiene el mejor individuo de cierto rango
+def obtiene_mejor_individuo_del_rango(rango):    
+    mejor_individuo = Individuo(None, math.inf, 0, 0, 0, [0,None], 0)    
+    iter = 0
+    for individuo in rango:
+        if iter == 0:
+            mejor_individuo = individuo
+        elif individuo.evaluacion < mejor_individuo.evaluacion:
+            mejor_individuo = individuo
+        iter += 1
+    return mejor_individuo
+
+# Obtiene el peor individuo de cierto rango
+def obtiene_peor_individuo_del_rango(rango):    
+    peor_individuo = Individuo(None, 0, 0, 0, 0, [0,None], 0)    
+    iter = 0
+    for individuo in rango:
+        if iter == 0:
+            peor_individuo = individuo
+        elif individuo.evaluacion > peor_individuo.evaluacion:
+            peor_individuo = individuo
+        iter += 1
+    return peor_individuo
+
+# Aplica el algoritmo NSGA-II de acuerdo a los datos que se reciben
 def alg_NSGA2(num_nodos, num_camiones, coordenadas, horario, capacidad):    
     mejor_solucion = Individuo(None, 0, 0, 0, 0, [0,None], 0)
-    peor_solucion = Individuo(None, 0, 0, 0, 0, [0,None], 0)
+    peor_solucion = Individuo(None, 0, 0, 0, 0, [0,None], 0)            
 
     # Inicializa poblacion
-    poblacion = genera_poblacion(int(num_nodos), int(num_camiones), coordenadas, horario)
-    #print(f'\nPoblación generada: \n{poblacion}')
+    poblacion = genera_poblacion(int(num_nodos), int(num_camiones), coordenadas, horario)    
 
     gen = 0
     while gen < 100:
+        mejor_solucion_actual = Individuo(None, 0, 0, 0, 0, [0,None], 0)
+        peor_solucion_actual = Individuo(None, 0, 0, 0, 0, [0,None], 0)
         print(f'Generación = {gen+1}')
         # Se agregan individuos a la poblacion
         iter = 0
         while iter < 50:
             # Evaluacion de la poblacion
-            evaluar_poblacion(poblacion, int(capacidad))
-            #print(f'\nEvaluación: \n{poblacion}\n')
-
-            # Condicion de termino
-            #for generacion in range(num_gen): 
+            evaluar_poblacion(poblacion, int(capacidad))            
             # Seleccion por torneo de padres    
             padre1, padre2 = seleccion_por_torneo(poblacion, int(capacidad))
-            #print(poblacion[padre1].solucion)
-            #print(poblacion[padre2].solucion)
-            #print()
-
             # Cruza de permutaciones
             hijo1, hijo2 = cruza_de_permutaciones(poblacion[padre1].solucion, poblacion[padre2].solucion, random.uniform(0.6, 0.9))
-            #print(hijo1.solucion)
-            #print(hijo2.solucion)
-
             # Mutacion de los hijos
             hijo1 = mutacion(hijo1.solucion, random.uniform(0.01, 0.1))
             hijo2 = mutacion(hijo2.solucion, random.uniform(0.01, 0.1))
-
             # Se agregan los hijos a la poblacion
             poblacion.append(hijo1)
             poblacion.append(hijo2)
-
             iter += 1  
-
         tamanio_poblacion = len(poblacion)
 
         # Evaluacion de la poblacion
         evaluar_poblacion(poblacion, int(capacidad))        
-
         # Aplica ordenamiento no determinado a la poblacion
-        # Por checar = En ocasiones se produce errores
         orden_indices = ordenamiento_no_determinado(poblacion)                  
-        '''
-        print(orden_indices)
-        print(poblacion[0])
-        print()
-        '''
         copia_poblacion = poblacion
         ind = 0
-        # Ordena la poblacion
+        # Ordena la poblacion de acuerdo a la lista de indices que se obtuvo
         for rango in orden_indices:
             for indice in rango:
                 poblacion[ind] = copia_poblacion[indice]
                 ind += 1        
-        '''
-        print(poblacion[0])
-        print(poblacion[1])
-        print()
-        '''    
+        # Aplica ordenamiento por distancia de aglomeracion a la poblacion
         poblacion = ordenamiento_por_distancia_de_aglomeracion(poblacion, orden_indices, capacidad)    
+        # Se eliminan los ultimos elementos de la poblacion
         copia_poblacion = poblacion.copy()
         ind = 0
         while ind < tamanio_poblacion:
             if ind >= tamanio_poblacion/2:
-            #if ind < tamanio_poblacion/2:
                 poblacion.remove(copia_poblacion[ind])            
             ind += 1
-        #print(f'Poblacion = {len(poblacion)}')        
         
-        mejor_solucion_por_gen = poblacion[0]
-        peor_solucion_por_gen = poblacion[len(poblacion)-1]
-        if gen == 1:
-            mejor_solucion = mejor_solucion_por_gen            
-        elif mejor_solucion_por_gen.evaluacion < mejor_solucion.evaluacion and mejor_solucion_por_gen.evaluacion < peor_solucion_por_gen.evaluacion:
-            mejor_solucion = mejor_solucion_por_gen
-        elif peor_solucion_por_gen.evaluacion < mejor_solucion.evaluacion and peor_solucion_por_gen.evaluacion < mejor_solucion_por_gen.evaluacion:
-            mejor_solucion = peor_solucion_por_gen
-        if gen == 1:
-            peor_solucion = peor_solucion_por_gen            
-        elif mejor_solucion_por_gen.evaluacion > peor_solucion.evaluacion and mejor_solucion_por_gen.evaluacion > peor_solucion_por_gen.evaluacion:
-            peor_solucion = mejor_solucion_por_gen
-        elif peor_solucion_por_gen.evaluacion > peor_solucion.evaluacion and peor_solucion_por_gen.evaluacion > mejor_solucion_por_gen.evaluacion:
-            peor_solucion = peor_solucion_por_gen
-        y_mejor.append(mejor_solucion.evaluacion)        
-        y_peor.append(peor_solucion.evaluacion)        
+        mejores_de_rangos = []
+        peores_de_rangos = []
+        inicio = 0
+        # Se obtiene el mejor y el peor de cada rango
+        for rango in orden_indices:
+            mejor = obtiene_mejor_individuo_del_rango(poblacion[inicio:inicio+len(rango)-1])            
+            mejores_de_rangos.append(mejor)
+            peor = obtiene_peor_individuo_del_rango(poblacion[inicio:inicio+len(rango)-1])            
+            peores_de_rangos.append(peor)
+            inicio = len(rango)-1          
+
+        # Se busca el mejor de la generacion
+        for individuo in mejores_de_rangos:
+            if gen == 1:
+                mejor_solucion = individuo               
+            if mejor_solucion_actual.evaluacion == 0:
+                mejor_solucion_actual = individuo                 
+            if individuo.evaluacion < mejor_solucion_actual.evaluacion:
+                mejor_solucion_actual = individuo
+        y_mejor_actual.append(mejor_solucion_actual.evaluacion)
+
+        # Se actualiza la mejor solucion encontrada
+        if mejor_solucion_actual.evaluacion < mejor_solucion.evaluacion:
+            mejor_solucion = mejor_solucion_actual
+        y_mejor.append(mejor_solucion.evaluacion)
+
+        # Se busca el peor de la generacion
+        for individuo in peores_de_rangos:
+            if gen == 1:
+                peor_solucion = individuo               
+            if peor_solucion_actual.evaluacion == 0:
+                peor_solucion_actual = individuo        
+            if individuo.evaluacion > peor_solucion_actual.evaluacion:
+                peor_solucion_actual = individuo
+        y_peor_actual.append(peor_solucion_actual.evaluacion)
+
+        # Se actualiza la peor solucion encontrada
+        if peor_solucion_actual.evaluacion > peor_solucion.evaluacion:
+            peor_solucion = peor_solucion_actual
+        y_peor.append(peor_solucion.evaluacion)
+
+        # Se obtiene el promedio de la evaluacion de los individuos de la poblacion
         promedio(poblacion)
         gen += 1
 
-    #print(poblacion)
+    # Recupera las evaluaciones de cada individuo de la poblacion final
+    for individuo in poblacion:
+        trayectos_soluciones.append(individuo.evaluacion_trayecto)
+        cargas_soluciones.append(individuo.evaluacion_carga)
+        tiempos_soluciones.append(individuo.evaluacion_tiempo)
+
+    # Se agrega las evaluaciones de la mejor solucion que se haya encontrado durante todo el proceso
+    if mejor_solucion != mejor_solucion_actual:
+        trayectos_soluciones.append(mejor_solucion.evaluacion_trayecto)
+        cargas_soluciones.append(mejor_solucion.evaluacion_carga)
+        tiempos_soluciones.append(mejor_solucion.evaluacion_tiempo)
+
     return mejor_solucion
 
+# Función para generar un nombre de archivo único
+def obtener_nombre(base_name, extension, nombre_archivo):
+    ruta = './output'      
+    os.makedirs(ruta,exist_ok=True)  
+    carpeta_rem = f'{nombre_archivo}-Graficas' 
+    ruta_carpeta = os.path.join(ruta, carpeta_rem)
+    counter = 1
+    filename = f"{base_name}{extension}"
+    while os.path.exists(f'{ruta_carpeta}/{filename}'):
+        filename = f"{base_name}_{counter}{extension}"
+        counter += 1
+    return filename
 
 if __name__ == '__main__':
     ruta_archivo = sys.argv[1]
+    nombre_archivo = os.path.basename(ruta_archivo)
     numN, numC, capacidad, coordenadas = leer_archivo(ruta_archivo)
     print(f"\nCantidad de nodos: {numN}")
     print(f"Cantidad de camiones: {numC}")
@@ -764,6 +725,47 @@ if __name__ == '__main__':
     print(f"Evaluación de carga = {solucion.evaluacion_carga}")
     print(f"Evaluación de tiempo = {solucion.evaluacion_tiempo}")
     print(f"\nTiempo en que finalizo el algoritmo NSGA2 = {fin-comienzo} seg")
+    
+    # DataFrame para almacenar los resultados
+    resultados = pd.DataFrame(columns=['Ejecución', 'Cantidad_Contenedores', 'Cantidad_Camiones', 'Capacidad_Camion', 'Horario', 'Mejor_Solucion', 'Evaluacion_Final', 'Evaluacion_Trayecto', 'Evaluacion_Carga', 'Evaluacion_Tiempo'])
+
+    # Agregar resultados al DataFrame
+    resultados = resultados._append({'Ejecución': 1, 'Cantidad_Contenedores': numN, 'Cantidad_Camiones': numC, 'Capacidad_Camion': capacidad, 'Horario': horario, 'Mejor_Solucion': solucion.solucion, 'Evaluacion_Final': solucion.evaluacion, 'Evaluacion_Trayecto': solucion.evaluacion_trayecto, 'Evaluacion_Carga': solucion.evaluacion_carga, 'Evaluacion_Tiempo': solucion.evaluacion_tiempo}, ignore_index=True)
+
+    # Guardar los resultados en un archivo CSV
+    nombre_archivo = f'{nombre_archivo}_resultados_NSGA2.csv'
+    num_lineas = 0
+    try:
+        # Si el archivo existe
+        df = pd.read_csv(nombre_archivo)        
+
+        # Abrir el archivo CSV y contar las líneas
+        with open(nombre_archivo, 'r') as archivo_csv:
+            lector_csv = csv.reader(archivo_csv)
+            for fila in lector_csv:
+                num_lineas += 1
+
+        df = pd.concat([df, resultados], ignore_index=True)
+        ultima_fila = df.shape[0]-1
+        df.loc[ultima_fila,'Ejecución'] = num_lineas
+        df.to_csv(nombre_archivo, index=False)
+    except FileNotFoundError:
+        # Si el archivo no existe, crear uno nuevo vacío
+        resultados.to_csv(nombre_archivo, index=False)
+        num_lineas += 1
+
+    # Creamos la ruta para guardar las graficas
+    ruta = './output'      
+    os.makedirs(ruta,exist_ok=True)  
+    carpeta = f'{nombre_archivo}-Graficas' 
+    ruta_carpeta = os.path.join(ruta, carpeta)
+    if os.path.exists(ruta_carpeta) and os.path.isdir(ruta_carpeta):
+        os.makedirs(ruta_carpeta,exist_ok=True) 
+    else:
+        os.makedirs(ruta_carpeta)         
+    carpeta_ejec = f'{num_lineas}-Ejecucion' 
+    ruta_ejecucion = os.path.join(ruta_carpeta, carpeta_ejec)
+    os.makedirs(ruta_ejecucion)
 
     # Crea grafica con la mejor, peor y el promedio de las aptitudes de cada generacion
     x_generacion = np.linspace(0, 100, 100)
@@ -773,6 +775,98 @@ if __name__ == '__main__':
     plt.title('NSGA-II con la optimización de rutas')
     plt.xlabel('Generación')
     plt.ylabel('Aptitud')
-    plt.legend()
+    plt.legend(loc='upper right')
     plt.xlim(1,100)
+    base = f"{nombre_archivo}-mejor_peor_y_promedio"
+    extension = ".png"
+    nombre = obtener_nombre(base, extension, nombre_archivo)
+    ruta_imagen = os.path.join(ruta_ejecucion, nombre)
+    plt.savefig(ruta_imagen)
+    plt.show()    
+
+    # Crea grafica con la mejor actual, peor actual y el promedio de las aptitudes de cada generacion
+    x_generacion = np.linspace(0, 100, 100)
+    plt.plot(x_generacion, y_mejor_actual, label='Mejor actual')
+    plt.plot(x_generacion, y_peor_actual, label='Peor actual')
+    plt.plot(x_generacion, y_promedio, label='Promedio')
+    plt.title('NSGA-II con la optimización de rutas')
+    plt.xlabel('Generación')
+    plt.ylabel('Aptitud')
+    plt.legend(loc='upper right')
+    plt.xlim(1,100)
+    base = f"{nombre_archivo}-mejor_act_peor_act_y_promedio"
+    extension = ".png"
+    nombre = obtener_nombre(base, extension, nombre_archivo)
+    ruta_imagen = os.path.join(ruta_ejecucion, nombre)
+    plt.savefig(ruta_imagen)    
+    plt.show()
+     
+    # Crea grafica de las soluciones finales de la poblacion con respecto a la evaluacion de su tiempo y carga de residuos    
+    fig, ax = plt.subplots()    
+    for x, y in zip(tiempos_soluciones, cargas_soluciones):         
+        if x == solucion.evaluacion_tiempo and y == solucion.evaluacion_carga:
+            ax.scatter(x, y, color='red', marker='o', zorder=5)
+        else:
+            ax.scatter(x, y, color='blue', marker='o')
+    plt.title('Evaluación del tiempo y carga de las soluciones')
+    plt.xlabel('Tiempo')
+    plt.ylabel('Carga')
+    base = f"{nombre_archivo}-tiempo_y_carga"
+    extension = ".png"
+    nombre = obtener_nombre(base, extension, nombre_archivo)
+    ruta_imagen = os.path.join(ruta_ejecucion, nombre)
+    plt.savefig(ruta_imagen)
+    plt.show()    
+
+    # Crea grafica de las soluciones finales de la poblacion con respecto a la evaluacion de su tiempo y trayecto    
+    fig, ax = plt.subplots()    
+    for x, y in zip(tiempos_soluciones, trayectos_soluciones):         
+        if x == solucion.evaluacion_tiempo and y == solucion.evaluacion_trayecto:
+            ax.scatter(x, y, color='red', marker='o', zorder=5)
+        else:
+            ax.scatter(x, y, color='blue', marker='o')
+    plt.title('Evaluación del tiempo y distancia de las soluciones')
+    plt.xlabel('Tiempo')
+    plt.ylabel('Distancia')
+    base = f"{nombre_archivo}-tiempo_y_distancia"
+    extension = ".png"
+    nombre = obtener_nombre(base, extension, nombre_archivo)
+    ruta_imagen = os.path.join(ruta_ejecucion, nombre)
+    plt.savefig(ruta_imagen)
+    plt.show()    
+
+    # Crea grafica de las soluciones finales de la poblacion con respecto a la evaluacion de carga de residuos y trayecto    
+    fig, ax = plt.subplots()    
+    for x, y in zip(cargas_soluciones, trayectos_soluciones):         
+        if x == solucion.evaluacion_carga and y == solucion.evaluacion_trayecto:
+            ax.scatter(x, y, color='red', marker='o', zorder=5)
+        else:
+            ax.scatter(x, y, color='blue', marker='o')      
+    plt.title('Evaluación de la carga y distancia de las soluciones')
+    plt.xlabel('Carga')
+    plt.ylabel('Distancia')
+    base = f"{nombre_archivo}-carga_y_distancia"
+    extension = ".png"
+    nombre = obtener_nombre(base, extension, nombre_archivo)
+    ruta_imagen = os.path.join(ruta_ejecucion, nombre)
+    plt.savefig(ruta_imagen)
+    plt.show()    
+
+    # Crea grafica 3d de las soluciones finales de la poblacion con respecto a todas sus evaluaciones
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    for x, y, z in zip(tiempos_soluciones, trayectos_soluciones, cargas_soluciones):         
+        if x == solucion.evaluacion_tiempo and y == solucion.evaluacion_trayecto and z == solucion.evaluacion_carga:
+            ax.scatter(x, y, z, color='red', marker='o', zorder=5)
+        else:
+            ax.scatter(x, y, z, color='blue', marker='o')   
+    ax.set_xlabel('Tiempo')
+    ax.set_ylabel('Distancia')
+    ax.set_zlabel('Carga de residuos')
+    plt.title('Evaluación de todos los objetivos de las soluciones')
+    base = f"{nombre_archivo}-tiempo_distancia_y_carga"
+    extension = ".png"
+    nombre = obtener_nombre(base, extension, nombre_archivo)
+    ruta_imagen = os.path.join(ruta_ejecucion, nombre)
+    plt.savefig(ruta_imagen)
     plt.show()
