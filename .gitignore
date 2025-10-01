@@ -1,0 +1,32 @@
+# Byte-compiled / optimized / DLL files
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+
+# Caches
+**/*.log
+**/*.pot
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/*.sqlite3
+
+# Virtual environment
+**/venv/
+**/ENV/
+**/env/
+**/.venv/
+
+# Env files (DO NOT COMMIT secrets)
+**/.env
+**/.env.*        # e.g. .env.local, .env.production, etc.
+
+# Misc
+**/.DS_Store
+**/Thumbs.db
+
+# Editor/IDE configs
+**/.vscode/
+**/.idea/
+**/*.sublime-project
+**/*.sublime-workspace
