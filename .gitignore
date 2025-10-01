@@ -1,32 +1,39 @@
-# Byte-compiled / optimized / DLL files
-**/__pycache__/
-**/*.py[cod]
-**/*$py.class
+# Bytecode, caches
+__pycache__/
+*.py[cod]
+*$py.class
 
-# Caches
-**/*.log
-**/*.pot
-**/*.pyc
-**/*.pyo
-**/*.pyd
-**/*.sqlite3
+# Entorno virtual
+venv/
+ENV/
+env/
+.venv/
 
-# Virtual environment
-**/venv/
-**/ENV/
-**/env/
-**/.venv/
+# Directorios de compilación u output
+build/
+dist/
+out/
+bin/
+obj/
 
-# Env files (DO NOT COMMIT secrets)
-**/.env
-**/.env.*        # e.g. .env.local, .env.production, etc.
+# Archivos temporales del sistema operativo
+.DS_Store
+Thumbs.db
 
-# Misc
-**/.DS_Store
-**/Thumbs.db
+# IDEs / editores
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
 
-# Editor/IDE configs
-**/.vscode/
-**/.idea/
-**/*.sublime-project
-**/*.sublime-workspace
+# Jupyter notebooks
+.ipynb_checkpoints/
+
+# Archivos de configuración local
+*.env
+.env.local
+.env.*.local
+
+# Macros / archivos swap / temporales
+*.swp
+*~
